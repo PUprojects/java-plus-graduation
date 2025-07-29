@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    gateway:
+      discovery.locator.enabled: true
+      routes:
+        - id: main_service_route
+          uri: lb://main-service
+          predicates:
+            - Path=/categories/**
+            - Path=/users/**
+            - Path=/admin/**
+            - Path=/events/**
+            - Path=/compilations/**
+
+server:
+  port: 8080
