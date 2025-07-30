@@ -1,6 +1,9 @@
 package ru.practicum.stats_client;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriBuilder;
@@ -12,14 +15,26 @@ import ru.practicum.stats_dto.ResponseStatsDto;
 import java.util.List;
 
 @Component
-@RequiredArgsConstructor
 public class StatsClientImpl implements StatsClient {
 
-    private final WebClient webClient;
+    private final DiscoveryClient discoveryClient;
+    private final RetryTemplate retryTemplate;
+
+    @Value("${stats-server.id:stats-server}")
+    private String statServiceId;
+
+    public StatsClientImpl(DiscoveryClient discoveryClient) {
+        this.discoveryClient = discoveryClient;
+
+        retryTemplate = RetryTemplate.builder()
+                .maxAttempts(3)
+                .fixedBackoff(3000)
+                .build();
+    }
 
     @Override
     public void sendHit(CreateHitDto hitDto) {
-        webClient.post()
+        getWebClient().post()
                 .uri("/hit")
                 .bodyValue(hitDto)
                 .retrieve()
@@ -29,7 +44,7 @@ public class StatsClientImpl implements StatsClient {
 
     @Override
     public List<ResponseStatsDto> getStats(CreateStatsDto statsDto) {
-        return webClient.get()
+        return getWebClient().get()
                 .uri(uriBuilder -> {
                     UriBuilder builder = uriBuilder
                             .path("/stats")
@@ -56,12 +71,30 @@ public class StatsClientImpl implements StatsClient {
 
 
     public Mono<Boolean> checkIp(String ip, String uri) {
-        return webClient.get().uri(uriBuilder -> uriBuilder
+        return getWebClient().get().uri(uriBuilder -> uriBuilder
                         .path("/stats/check")
                         .queryParam("ip", ip)
                         .queryParam("uri", uri)
                         .build()
                 ).retrieve()
                 .bodyToMono(Boolean.class);
+    }
+
+    private String getStatServerBaseUrl() {
+        ServiceInstance statServiceInstance;
+        try {
+            statServiceInstance = discoveryClient.getInstances(statServiceId).getFirst();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+         return statServiceInstance.getUri().toString();
+    }
+
+    private WebClient getWebClient() {
+        String baseUrl = retryTemplate.execute(cxt -> getStatServerBaseUrl());
+        return WebClient.builder()
+                .baseUrl(baseUrl)
+                .build();
     }
 }

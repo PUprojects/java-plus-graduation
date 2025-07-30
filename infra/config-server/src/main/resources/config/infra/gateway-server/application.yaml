@@ -6,11 +6,7 @@ spring:
         - id: main_service_route
           uri: lb://main-service
           predicates:
-            - Path=/categories/**
-            - Path=/users/**
-            - Path=/admin/**
-            - Path=/events/**
-            - Path=/compilations/**
+            - Path=/categories/**,/admin/**,/users/**,/events/**,/compilations/**
 
 server:
   port: 8080
