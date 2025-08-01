@@ -37,6 +37,7 @@
 		<spring-cloud-dependencies.version>2023.0.3</spring-cloud-dependencies.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
 		<checkstyle-plugin.version>3.1.2</checkstyle-plugin.version>
+		<lombok.version>1.18.36</lombok.version>
 
 		<!--       Plugins       -->
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
@@ -53,7 +54,12 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
-
+			<dependency>
+				<groupId>org.projectlombok</groupId>
+				<artifactId>lombok</artifactId>
+				<version>${lombok.version}</version>
+				<scope>provided</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
