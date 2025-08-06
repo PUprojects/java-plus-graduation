@@ -7,7 +7,6 @@ import lombok.experimental.FieldDefaults;
 import ru.practicum.category.model.Category;
 import ru.practicum.event.enums.EventState;
 import ru.practicum.location.model.Location;
-import ru.practicum.user.model.User;
 
 import java.time.LocalDateTime;
 
@@ -30,10 +29,7 @@ public class Event {
     @Column(name = "annotation")
     String annotation;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    // @ManyToOne
-    @JoinColumn(name = "initiator_id")
-    User initiator;
+    Long initiatorId;
 
     @Column(name = "title")
     String title;
@@ -45,7 +41,6 @@ public class Event {
     @JoinColumn(name = "category_id")
     Category category;
 
-    //@ManyToOne(fetch = FetchType.LAZY)
     @ManyToOne(cascade = {CascadeType.ALL})
     @JoinColumn(name = "location_id")
     Location location;

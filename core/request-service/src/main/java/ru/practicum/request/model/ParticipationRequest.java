@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import ru.practicum.event.model.Event;
 import ru.practicum.request.enums.RequestStatus;
-import ru.practicum.user.model.User;
 
 import java.time.LocalDateTime;
 
@@ -32,7 +31,5 @@ public class ParticipationRequest {
     @JoinColumn(name = "event_id", nullable = false)
     private Event event;
 
-    @ManyToOne
-    @JoinColumn(name = "requester_id", nullable = false)
-    private User requester;
+    private Long requesterId;
 }

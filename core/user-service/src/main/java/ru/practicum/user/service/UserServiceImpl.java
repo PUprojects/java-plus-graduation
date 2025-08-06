@@ -9,6 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import ru.practicum.user.dto.UserDto;
 import ru.practicum.user.dto.UserParam;
+import ru.practicum.user.dto.UserShortDto;
 import ru.practicum.user.model.MapperUser;
 import ru.practicum.user.model.User;
 import ru.practicum.user.repository.UserRepository;
@@ -47,10 +48,17 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public UserDto findUserById(UserParam params) {
-        User user = userRepository.findById(params.userId())
+    public UserDto findUserById(Long userId) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("пользователь не найден по id"));
         return MapperUser.toUserDto(user);
+    }
+
+    @Override
+    public UserShortDto findShortUserById(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("пользователь не найден по id"));
+        return MapperUser.toUserShortDto(user);
     }
 
     @Override
@@ -80,5 +88,10 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void deleteUser(UserParam params) {
         userRepository.deleteById(params.userId());
+    }
+
+    @Override
+    public Boolean isUserExistById(Long userId) {
+        return userRepository.existsById(userId);
     }
 }

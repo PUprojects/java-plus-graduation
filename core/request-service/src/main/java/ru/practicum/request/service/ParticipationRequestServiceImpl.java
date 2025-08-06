@@ -13,8 +13,7 @@ import ru.practicum.request.enums.RequestStatus;
 import ru.practicum.request.mapper.ParticipationRequestMapper;
 import ru.practicum.request.model.ParticipationRequest;
 import ru.practicum.request.repository.ParticipationRequestRepository;
-import ru.practicum.user.model.User;
-import ru.practicum.user.repository.UserRepository;
+import ru.practicum.user.feign.UserClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,13 +25,13 @@ import java.util.stream.Collectors;
 public class ParticipationRequestServiceImpl implements ParticipationRequestService {
 
     private final ParticipationRequestRepository requestRepository;
-    private final UserRepository userRepository;
     private final EventRepository eventRepository;
+    private final UserClient userClient;
 
     @Override
     public List<ParticipationRequestDto> getUserRequests(Long userId) {
-        User user = getUserOrThrow(userId);
-        return requestRepository.findAllByRequester(user).stream()
+        checkUserExist(userId);
+        return requestRepository.findAllByRequesterId(userId).stream()
                 .map(ParticipationRequestMapper::toDto)
                 .collect(Collectors.toList());
     }
@@ -40,14 +39,14 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
     @Override
     @Transactional
     public ParticipationRequestDto createRequest(Long userId, Long eventId) {
-        User user = getUserOrThrow(userId);
+        checkUserExist(userId);
         Event event = getEventOrThrow(eventId);
 
         if (!requestRepository.findByEventIdAndRequesterId(eventId, userId).isEmpty()) {
             throw new ConflictException("Request already exists");
         }
 
-        if (event.getInitiator().getId().equals(userId)) {
+        if (event.getInitiatorId().equals(userId)) {
             throw new IllegalStateException("Нельзя подавать заявку на своё собственное событие.");
         }
         if (!event.getState().equals(EventState.PUBLISHED)) {
@@ -62,7 +61,7 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
         }
 
         ParticipationRequest request = ParticipationRequest.builder()
-                .requester(user)
+                .requesterId(userId)
                 .event(event)
                 .status(RequestStatus.PENDING)
                 .created(LocalDateTime.now())
@@ -70,8 +69,7 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
         if (event.getParticipantLimit() == 0) {
             request.setStatus(RequestStatus.CONFIRMED);
         }
-        ParticipationRequestDto rez = ParticipationRequestMapper.toDto(requestRepository.save(request));
-        return rez;
+        return ParticipationRequestMapper.toDto(requestRepository.save(request));
     }
 
     @Override
@@ -80,7 +78,7 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
         ParticipationRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new NotFoundException("Заявка не найдена."));
 
-        if (!request.getRequester().getId().equals(userId)) {
+        if (!request.getRequesterId().equals(userId)) {
             throw new IllegalStateException("Вы не можете отменить чужую заявку.");
         }
 
@@ -92,9 +90,15 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
         throw new IllegalStateException("Заявка уже есть.");
     }
 
-    private User getUserOrThrow(Long userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Пользователь не найден."));
+//    private User getUserOrThrow(Long userId) {
+//        return userRepository.findById(userId)
+//                .orElseThrow(() -> new NotFoundException("Пользователь не найден."));
+//    }
+
+    private void checkUserExist(Long userId) {
+        if(!userClient.isUserExist(userId)) {
+            throw new NotFoundException("Пользователь не найден.");
+        }
     }
 
     private Event getEventOrThrow(Long eventId) {

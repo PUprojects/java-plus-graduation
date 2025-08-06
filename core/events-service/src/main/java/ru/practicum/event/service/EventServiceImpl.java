@@ -30,27 +30,24 @@ import ru.practicum.request.enums.RequestStatus;
 import ru.practicum.request.mapper.ParticipationRequestMapper;
 import ru.practicum.request.model.ParticipationRequest;
 import ru.practicum.request.repository.ParticipationRequestRepository;
-import ru.practicum.user.model.User;
-import ru.practicum.user.repository.UserRepository;
+import ru.practicum.user.dto.UserShortDto;
+import ru.practicum.user.feign.UserClient;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 @Slf4j
 @Service("eventServiceImpl")
 @RequiredArgsConstructor
 public class EventServiceImpl implements EventService {
 
-    private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
     private final LocationRepository locationRepository;
-    private final EventRepository eventRepository;//  private final
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final EventRepository eventRepository;
+    //private final RestTemplate restTemplate = new RestTemplate();
     private final CategoryService categoryService;
     private final ParticipationRequestRepository participationRequestRepository;
+    private final UserClient userClient;
 
     @PersistenceUnit
     private EntityManagerFactory entityManager;
@@ -66,7 +63,8 @@ public class EventServiceImpl implements EventService {
     public EventFullDto getEventById(long eventId) {
         Event event = eventRepository.findByIdAndState(eventId, EventState.PUBLISHED)
                 .orElseThrow(() -> new EntityNotFoundException("Event with id=" + eventId + " was not found"));
-        return MapperEvent.toEventFullDto(event);
+        UserShortDto userDto = userClient.getUser(event.getInitiatorId());
+        return MapperEvent.toEventFullDto(event, userDto);
     }
 
     @Override
@@ -130,9 +128,8 @@ public class EventServiceImpl implements EventService {
         }
         Category category = categoryRepository.findById(newEventDto.getCategory())
                 .orElseThrow(() -> new NotFoundException("Category was not found " + newEventDto.getCategory()));
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User with was not found " + userId));
-        Event event = MapperEvent.toEvent(newEventDto, category, user);
+        UserShortDto userDto = userClient.getUser(userId);
+        Event event = MapperEvent.toEvent(newEventDto, category, userId);
         event.setLocation(locationRepository.save(newEventDto.getLocation()));
 
         if (newEventDto.getPaid() == null) {
@@ -146,7 +143,7 @@ public class EventServiceImpl implements EventService {
         }
         event.setConfirmedRequests(0L);
         event.setCreatedOn(LocalDateTime.now());
-        return MapperEvent.toEventFullDto(eventRepository.save(event));
+        return MapperEvent.toEventFullDto(eventRepository.save(event), userDto);
 
     }
 
@@ -160,8 +157,10 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public EventFullDto getEventById(Long userId, Integer eventId) {
-        return MapperEvent.toEventFullDto(eventRepository.findByIdAndInitiatorId(eventId, userId)
-                .orElseThrow(() -> new NotFoundException("Event not found " + eventId)));
+        UserShortDto userDto = userClient.getUser(userId);
+        Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
+                .orElseThrow(() -> new NotFoundException("Event not found " + eventId));
+        return MapperEvent.toEventFullDto(event, userDto);
     }
 
 
@@ -171,6 +170,7 @@ public class EventServiceImpl implements EventService {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException("Event not found " + eventId));
 
+        UserShortDto userShortDto = userClient.getUser(userId);
         validateForPrivate(event.getState(), updateEventUserRequest.getStateAction());
         Category category;
         if (updateEventUserRequest.getCategory() != null) {
@@ -191,7 +191,7 @@ public class EventServiceImpl implements EventService {
         }
 
         MapperEvent.updateFromDto(event, updateEventUserRequest, category, location);
-        return MapperEvent.toEventFullDto(eventRepository.save(event));
+        return MapperEvent.toEventFullDto(eventRepository.save(event), userShortDto);
     }
 
     @Override
@@ -199,7 +199,7 @@ public class EventServiceImpl implements EventService {
         BooleanExpression expression = QEvent.event.id.gt(parameters.from());
 
         if (parameters.usersIds() != null) {
-            expression = expression.and(QEvent.event.initiator.id.in(parameters.usersIds()));
+            expression = expression.and(QEvent.event.initiatorId.in(parameters.usersIds()));
         }
 
         if (parameters.eventStates() != null) {
@@ -225,9 +225,18 @@ public class EventServiceImpl implements EventService {
         Page<Event> result;
         Pageable pageable = PageRequest.of(0, parameters.size());
         result = eventRepository.findAll(expression, pageable);
+        Map<Long, UserShortDto> usersShortDto = new HashMap<>();
 
         return result.stream()
-                .map(MapperEvent::toEventFullDto)
+                .map(event -> {
+                    UserShortDto userShortDto = usersShortDto.get(event.getInitiatorId());
+                    if(userShortDto == null) {
+                        userShortDto = userClient.getUser(event.getInitiatorId());
+                        usersShortDto.put(event.getInitiatorId(), userShortDto);
+                    }
+
+                    return MapperEvent.toEventFullDto(event, userShortDto);
+                })
                 .toList();
     }
 
@@ -298,13 +307,15 @@ public class EventServiceImpl implements EventService {
             event.setTitle(updateEventAdminRequest.getTitle());
         }
 
-        return MapperEvent.toEventFullDto(eventRepository.save(event));
+        UserShortDto userShortDto = userClient.getUser(event.getInitiatorId());
+
+        return MapperEvent.toEventFullDto(eventRepository.save(event), userShortDto);
     }
 
     @Override
     public List<ParticipationRequestDto> findRequestsByEventId(long userId, long eventId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User with was not found " + userId));
+        checkUserExist(userId);
+
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("События с id = " + eventId + " не найдено"));
 
@@ -317,11 +328,10 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional
     public EventRequestStatusUpdateResult updateRequestsStatus(long userId, long eventId, EventRequestStatusUpdateRequest eventRequestStatusUpdateRequest) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User is not found with id = " + userId));
+        checkUserExist(userId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("event is not found with id = " + eventId));
-        if (!event.getInitiator().equals(user))
+        if (!event.getInitiatorId().equals(userId))
             throw new ForbiddenException("User with id = " + userId + " is not a initiator of event with id = " + eventId);
 
         //если для события лимит заявок равен 0 или отключена пре-модерация заявок, то подтверждение заявок не требуется
@@ -375,13 +385,18 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public Collection<ParticipationRequestDto> findAllRequestsByEventId(long userId, long eventId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User is not found with id = " + userId));
+        checkUserExist(userId);
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("event is not found with id = " + eventId));
         Collection<ParticipationRequestDto> result = new ArrayList<>();
         result = participationRequestRepository.findAllByEvent(event).stream()
                 .map(ParticipationRequestMapper::toDto).toList();
         return result;
+    }
+
+    private void checkUserExist(Long userId) {
+        if(!userClient.isUserExist(userId)) {
+            throw new NotFoundException("Пользователь не найден.");
+        }
     }
 }

@@ -19,7 +19,7 @@ import java.util.Collection;
 @Slf4j
 @RequestMapping(path = "/admin/users")
 @Validated
-public class UserController {
+public class UserAdminController {
     private final UserService userService;
 
     @PostMapping
@@ -43,8 +43,7 @@ public class UserController {
     @ResponseStatus(HttpStatus.OK)
     public UserDto getUser(@PathVariable long userId) {
         log.info("GET Поиск пользователя по id: {}", userId);
-        UserParam params = new UserParam(null, null, userId, null, null, null);
-        return userService.findUserById(params);
+        return userService.findUserById(userId);
     }
 
     @GetMapping

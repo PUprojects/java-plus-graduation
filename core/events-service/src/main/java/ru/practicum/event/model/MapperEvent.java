@@ -11,8 +11,7 @@ import ru.practicum.event.dto.UpdateEventUserRequest;
 import ru.practicum.event.enums.EventState;
 import ru.practicum.event.enums.StateActionUser;
 import ru.practicum.location.model.Location;
-import ru.practicum.user.model.MapperUser;
-import ru.practicum.user.model.User;
+import ru.practicum.user.dto.UserShortDto;
 
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
@@ -21,7 +20,7 @@ import java.util.Objects;
 @UtilityClass
 public class MapperEvent {
 
-    public static EventFullDto toEventFullDto(Event event) {
+    public static EventFullDto toEventFullDto(Event event, UserShortDto userDto) {
         String published = Objects.nonNull(event.getPublishedOn()) ?
                 event.getPublishedOn().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : null;
         return EventFullDto.builder()
@@ -30,7 +29,7 @@ public class MapperEvent {
                 .category(MapperCategory.toCategoryDto(event.getCategory()))
                 .confirmedRequests(event.getConfirmedRequests())
                 .eventDate(event.getEventDate())
-                .initiator(MapperUser.toUserShortDto(event.getInitiator()))
+                .initiator(userDto)
                 .paid(event.getPaid())
                 .title(event.getTitle())
                 .views(event.getViews())
@@ -44,14 +43,14 @@ public class MapperEvent {
                 .build();
     }
 
-    public static Event toEvent(NewEventDto newEventDto, Category category, User initiator) {
+    public static Event toEvent(NewEventDto newEventDto, Category category, Long initiatorId) {
         return Event.builder()
                 .id(0L)
                 .annotation(newEventDto.getAnnotation())
                 .category(category)
                 .description(newEventDto.getDescription())
                 .eventDate(newEventDto.getEventDate())
-                .initiator(initiator)
+                .initiatorId(initiatorId)
                 .location(newEventDto.getLocation())
                 .paid(newEventDto.getPaid())
                 .participantLimit(newEventDto.getParticipantLimit())
@@ -70,7 +69,8 @@ public class MapperEvent {
                 .category(MapperCategory.toCategoryDto(event.getCategory()))
                 .confirmedRequests(event.getConfirmedRequests())
                 .eventDate(event.getEventDate())
-                .initiator(MapperUser.toUserShortDto(event.getInitiator()))
+                //.initiator(MapperUser.toUserShortDto(event.getInitiator()))
+                .initiator(null)
                 .paid(event.getPaid())
                 .title(event.getTitle())
                 .views(event.getViews())
