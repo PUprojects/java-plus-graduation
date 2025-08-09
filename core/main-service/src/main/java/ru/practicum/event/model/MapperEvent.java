@@ -8,7 +8,6 @@ import ru.practicum.event.dto.EventFullDto;
 import ru.practicum.event.dto.EventShortDto;
 import ru.practicum.event.dto.NewEventDto;
 import ru.practicum.event.dto.UpdateEventUserRequest;
-import ru.practicum.event.enums.EventState;
 import ru.practicum.event.enums.StateActionUser;
 import ru.practicum.location.model.Location;
 import ru.practicum.user.dto.UserShortDto;

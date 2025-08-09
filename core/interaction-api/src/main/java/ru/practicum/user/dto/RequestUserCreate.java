@@ -10,11 +10,10 @@ import lombok.Setter;
 @AllArgsConstructor
 public class RequestUserCreate {
     @Email
-    @NotNull
+    @NotBlank
     @Size(min = 6, max = 254)
     @Pattern(regexp = ".+@.+\\..{2,63}")
     private String email;
-    @NotNull
     @NotBlank
     @Size(min = 2, max = 250)
     private String name;
