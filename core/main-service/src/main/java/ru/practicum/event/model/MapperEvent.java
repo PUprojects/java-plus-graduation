@@ -8,8 +8,10 @@ import ru.practicum.event.dto.EventFullDto;
 import ru.practicum.event.dto.EventShortDto;
 import ru.practicum.event.dto.NewEventDto;
 import ru.practicum.event.dto.UpdateEventUserRequest;
+import ru.practicum.event.enums.EventState;
 import ru.practicum.event.enums.StateActionUser;
 import ru.practicum.location.model.Location;
+import ru.practicum.location.model.MapperLocation;
 import ru.practicum.user.dto.UserShortDto;
 
 import java.time.format.DateTimeFormatter;
@@ -34,7 +36,7 @@ public class MapperEvent {
                 .views(event.getViews())
                 .createdOn(event.getCreatedOn())
                 .description(event.getDescription())
-                .location(event.getLocation())
+                .location(MapperLocation.toLocationDto(event.getLocation()))
                 .participantLimit(event.getParticipantLimit())
                 .publishedOn(published)
                 .requestModeration(event.getRequestModeration())
@@ -50,7 +52,7 @@ public class MapperEvent {
                 .description(newEventDto.getDescription())
                 .eventDate(newEventDto.getEventDate())
                 .initiatorId(initiatorId)
-                .location(newEventDto.getLocation())
+                .location(MapperLocation.toLocation(newEventDto.getLocation()))
                 .paid(newEventDto.getPaid())
                 .participantLimit(newEventDto.getParticipantLimit())
                 .publishedOn(null)

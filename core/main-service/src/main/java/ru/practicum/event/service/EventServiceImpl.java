@@ -17,21 +17,22 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.category.model.Category;
 import ru.practicum.category.repository.CategoryRepository;
 import ru.practicum.category.service.CategoryService;
-import ru.practicum.event.model.EventState;
+import ru.practicum.event.dto.*;
+import ru.practicum.event.enums.EventState;
+import ru.practicum.event.enums.StateAction;
 import ru.practicum.event.enums.StateActionUser;
 import ru.practicum.event.model.*;
 import ru.practicum.event.repository.EventRepository;
 import ru.practicum.event.repository.LocationRepository;
 import ru.practicum.exception_handler.*;
 import ru.practicum.location.model.Location;
+import ru.practicum.location.model.MapperLocation;
 import ru.practicum.request.dto.ParticipationRequestDto;
 import ru.practicum.request.enums.RequestStatus;
-import ru.practicum.request.mapper.ParticipationRequestMapper;
-import ru.practicum.request.model.ParticipationRequest;
-import ru.practicum.request.repository.ParticipationRequestRepository;
+import ru.practicum.request.feign.RequestClient;
 import ru.practicum.user.dto.UserShortDto;
 import ru.practicum.user.feign.UserClient;
-import ru.practicum.event.dto.*;
+
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -44,9 +45,9 @@ public class EventServiceImpl implements EventService {
     private final CategoryRepository categoryRepository;
     private final LocationRepository locationRepository;
     private final EventRepository eventRepository;
-    //private final RestTemplate restTemplate = new RestTemplate();
     private final CategoryService categoryService;
-    private final ParticipationRequestRepository participationRequestRepository;
+    //private final ParticipationRequestRepository participationRequestRepository;
+    private final RequestClient requestClient;
     private final UserClient userClient;
 
     @PersistenceUnit
@@ -115,7 +116,7 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional
     public void changeViews(Long id) {
-        Event event = eventRepository.findById(id).get();
+        Event event = eventRepository.findById(id).orElseThrow(() -> new NotFoundException("Event not found " + id));
         event.setViews(event.getViews() + 1);
         eventRepository.save(event);
     }
@@ -130,7 +131,7 @@ public class EventServiceImpl implements EventService {
                 .orElseThrow(() -> new NotFoundException("Category was not found " + newEventDto.getCategory()));
         UserShortDto userDto = userClient.getUser(userId);
         Event event = MapperEvent.toEvent(newEventDto, category, userId);
-        event.setLocation(locationRepository.save(newEventDto.getLocation()));
+        event.setLocation(locationRepository.save(MapperLocation.toLocation(newEventDto.getLocation())));
 
         if (newEventDto.getPaid() == null) {
             event.setPaid(false);
@@ -181,7 +182,7 @@ public class EventServiceImpl implements EventService {
         }
         Location location;
         if (updateEventUserRequest.getLocation() != null) {
-            location = locationRepository.save(updateEventUserRequest.getLocation());
+            location = locationRepository.save(MapperLocation.toLocation(updateEventUserRequest.getLocation()));
         } else {
             location = null;
         }
@@ -268,7 +269,7 @@ public class EventServiceImpl implements EventService {
         }
 
         if (updateEventAdminRequest.getLocation() != null) {
-            event.setLocation(updateEventAdminRequest.getLocation());
+            event.setLocation(MapperLocation.toLocation(updateEventAdminRequest.getLocation()));
         }
 
         if (updateEventAdminRequest.getPaid() != null) {
@@ -316,13 +317,10 @@ public class EventServiceImpl implements EventService {
     public List<ParticipationRequestDto> findRequestsByEventId(long userId, long eventId) {
         checkUserExist(userId);
 
-        Event event = eventRepository.findById(eventId)
+        eventRepository.findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("События с id = " + eventId + " не найдено"));
 
-
-        return participationRequestRepository.findAllByEvent(event).stream()
-                .map(ParticipationRequestMapper::toDto)
-                .toList();
+        return requestClient.getRequestsByEventId(eventId);
     }
 
     @Override
@@ -340,9 +338,8 @@ public class EventServiceImpl implements EventService {
             return result;
         }
 
-
-        Collection<ParticipationRequest> requests = participationRequestRepository
-                .findByEventIdAndIdIn(eventId, eventRequestStatusUpdateRequest.getRequestIds()).stream().toList();
+        List<ParticipationRequestDto> requests = requestClient.getByEventIdAndIdIn(eventId,
+                eventRequestStatusUpdateRequest.getRequestIds());
 
 
         if (event.getConfirmedRequests() + requests.size() > event.getParticipantLimit()
@@ -354,22 +351,23 @@ public class EventServiceImpl implements EventService {
                 && eventRequestStatusUpdateRequest.getStatus().equals(RequestStatus.REJECTED))) {
             throw new ConflictException("request already confirmed");
         }
-        for (ParticipationRequest oneRequest : requests) {
+
+        for (ParticipationRequestDto oneRequest : requests) {
             oneRequest.setStatus(RequestStatus.valueOf(eventRequestStatusUpdateRequest.getStatus().toString()));
         }
-        participationRequestRepository.saveAll(requests);
+
+        requestClient.updateRequests(requests);
+
         if (eventRequestStatusUpdateRequest.getStatus().equals(RequestStatus.CONFIRMED)) {
             event.setConfirmedRequests(event.getConfirmedRequests() + requests.size());
         }
         eventRepository.save(event);
         if (eventRequestStatusUpdateRequest.getStatus().equals(RequestStatus.CONFIRMED)) {
-            result.setConfirmedRequests(requests.stream()
-                    .map(ParticipationRequestMapper::toDto).toList());
+            result.setConfirmedRequests(requests);
         }
 
         if (eventRequestStatusUpdateRequest.getStatus().equals(RequestStatus.REJECTED)) {
-            result.setRejectedRequests(requests.stream()
-                    .map(ParticipationRequestMapper::toDto).toList());
+            result.setRejectedRequests(requests);
         }
 
         return result;
@@ -386,12 +384,14 @@ public class EventServiceImpl implements EventService {
     @Override
     public Collection<ParticipationRequestDto> findAllRequestsByEventId(long userId, long eventId) {
         checkUserExist(userId);
-        Event event = eventRepository.findById(eventId)
+        eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("event is not found with id = " + eventId));
-        Collection<ParticipationRequestDto> result = new ArrayList<>();
-        result = participationRequestRepository.findAllByEvent(event).stream()
-                .map(ParticipationRequestMapper::toDto).toList();
-        return result;
+        return requestClient.getRequestsByEventId(eventId);
+    }
+
+    @Override
+    public List<EventShortDto> getShortsByIds(List<Long> eventsIds) {
+        return eventRepository.findByIdIn(eventsIds);
     }
 
     private void checkUserExist(Long userId) {

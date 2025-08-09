@@ -29,6 +29,3 @@ logging:
       transaction: INFO
       transaction.interceptor: DEBUG
       orm.jpa.JpaTransactionManager: DEBUG
-
-stats-server:
-  id: stats-server
